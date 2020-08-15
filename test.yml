@@ -1,0 +1,60 @@
+---
+- name: Validate NX Appliance upgrade status using ansible_cli
+  gather_facts: false
+  become: false
+  connection: ssh
+  hosts: all
+  vars:
+    image_name: '9.0.0.916432' #provide the name of the image you want to upgrade on.
+
+  tasks:
+
+   - name: Wait for server to restart
+     local_action:
+      module: wait_for
+        host={{ inventory_hostname }}
+        port=22
+#       delay=1
+      timeout: 5
+     register: wait_result
+     ignore_errors: yes
+   - debug:
+         msg: "{{ 'Failed with message: ' ~ wait_result.msg if wait_result.failed else 'Success connecting to Firewall' }}"
+
+   - name: SSH connection established
+     set_fact:
+      ssh_status: "Success"
+#      when: wait_result.ok
+
+   - name: SSH connection failed
+     set_fact:
+      ssh_status: "Failed"
+     when: wait_result.failed
+
+   - name: Running CMD "show fenet image version" to Check existing image version on NX appliance
+     raw: cli "show fenet image version"
+     register: image_installed
+   - set_fact:
+      image_out: "{{ image_installed.stdout | regex_search(image_name) }}"
+
+   - name: NX Upgrade Successfully Completed
+     set_fact:
+      nx_status: "Success"
+     when: image_out == image_name
+
+   - name: NX Upgrade failed
+     set_fact:
+      nx_status: "Failed"
+     when: image_out != image_name
+
+   - name: Output of NX status being updated to "tmp" HTML file
+     delegate_to: localhost
+     template:
+       src: /home/local/FIREEYE/naveen.raj-a/ansible_naveen/template.j2
+       dest: /home/local/FIREEYE/naveen.raj-a/ansible_naveen/tmp.html
+
+   - name: Append data from "tmp" file to "nxstatus" HTML file
+     delegate_to: localhost
+     shell: cat tmp.html >> nxstatus.html
+     args:
+       chdir: "/home/local/FIREEYE/naveen.raj-a/ansible_naveen"
